@@ -59,7 +59,7 @@ def process_image(
             recolored_image = recolor_image(source_image, source_palette, target_palette)
 
             # Output format:  nameofthefile_palettename.png
-            output_path = GENERATED_FOLDER / f"{basename}_{palette_name}. png"
+            output_path = GENERATED_FOLDER / f"{basename}_{palette_name}.png"
             recolored_image.save(str(output_path), "PNG")
             print(f"      Saved: {output_path}")
 
@@ -68,7 +68,7 @@ def process_image(
                 print(f"    Generating {palette_name} emissive version...")
                 emissive_image = create_emissive_texture(source_image, source_palette, target_palette)
                 
-                emissive_path = GENERATED_FOLDER / f"{basename}_{palette_name}_emissive. png"
+                emissive_path = GENERATED_FOLDER / f"{basename}_{palette_name}_emissive.png"
                 emissive_image.save(str(emissive_path), "PNG")
                 print(f"      Saved: {emissive_path}")
 
