@@ -1,6 +1,7 @@
 """
 Streamlit Web Application for PNG Recoloring.
 Upload PNG images and generate recolored versions with custom palettes.
+Palettes are organized by groups - same palette name can exist in different groups.
 """
 
 import streamlit as st
@@ -10,11 +11,15 @@ import zipfile
 from pathlib import Path
 
 from palettes import (
-    get_source_palettes, get_target_palettes, get_palette_groups,
-    add_source_palette, add_target_palette, delete_source_palette, delete_target_palette,
-    add_palette_group, update_palette_group, delete_palette_group,
+    get_source_palettes, get_palette_groups, get_palette_groups_hex,
+    get_group_names, get_palettes_in_group,
+    add_source_palette, delete_source_palette,
+    add_palette_group, delete_palette_group, rename_palette_group,
+    add_palette_to_group, update_palette_in_group, delete_palette_from_group,
+    copy_palette_to_group,
     export_palettes_json, import_palettes_json,
-    rgb_to_hex, hex_to_rgb
+    rgb_to_hex, hex_to_rgb,
+    get_unique_palette_identifier
 )
 from recolor import recolor_image, load_image_from_bytes, image_to_bytes
 
@@ -41,19 +46,23 @@ st.markdown("""
     .palette-preview {
         display: flex;
         gap: 4px;
-        margin:  8px 0;
+        margin: 8px 0;
     }
-    .stTabs [data-baseweb="tab-list"] {
+    . stTabs [data-baseweb="tab-list"] {
         gap: 8px;
     }
-    .delete-btn {
-        color: #ff4b4b;
+    .group-header {
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        padding: 10px 15px;
+        border-radius:  8px;
+        color: white;
+        margin-bottom: 10px;
     }
 </style>
 """, unsafe_allow_html=True)
 
 
-def display_color_palette(palette: list, show_hex: bool = True):
+def display_color_palette(palette:  list, show_hex: bool = True):
     """Display a color palette with visual color boxes."""
     cols = st.columns(len(palette))
     for i, (col, color) in enumerate(zip(cols, palette)):
@@ -64,7 +73,7 @@ def display_color_palette(palette: list, show_hex: bool = True):
         with col:
             st.markdown(
                 f'<div style="background-color: {hex_color}; width: 100%; height: 40px; '
-                f'border-radius: 4px; border: 2px solid #333;"></div>',
+                f'border-radius:  4px; border: 2px solid #333;"></div>',
                 unsafe_allow_html=True
             )
             if show_hex:
@@ -85,15 +94,19 @@ def display_color_palette_inline(palette: list) -> str:
 
 
 def create_zip_file(images_dict: dict) -> bytes:
-    """Create a ZIP file containing all recolored images."""
+    """
+    Create a ZIP file containing all recolored images.
+    Output format: filename_palettename.png
+    """
     zip_buffer = io.BytesIO()
 
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for filename, palettes in images_dict.items():
             basename = Path(filename).stem
             for palette_name, img_bytes in palettes.items():
-                zip_path = f"{basename}/{palette_name}.png"
-                zip_file.writestr(zip_path, img_bytes)
+                # Format: nameofthefile_color.png
+                zip_path = f"{basename}_{palette_name}. png"
+                zip_file. writestr(zip_path, img_bytes)
 
     zip_buffer.seek(0)
     return zip_buffer.getvalue()
@@ -103,10 +116,9 @@ def palette_manager_page():
     """Palette and group management interface."""
     st.header("🎨 Palette Manager")
 
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3 = st.tabs([
         "📥 Source Palettes",
-        "🎯 Target Palettes",
-        "📁 Palette Groups",
+        "📁 Palette Groups & Palettes",
         "💾 Import/Export"
     ])
 
@@ -119,7 +131,7 @@ def palette_manager_page():
 
         # Display existing source palettes
         if source_palettes:
-            for name, colors in source_palettes.items():
+            for name, colors in source_palettes. items():
                 with st.expander(f"🎨 {name}", expanded=False):
                     display_color_palette(colors)
                     col1, col2 = st. columns([3, 1])
@@ -129,7 +141,7 @@ def palette_manager_page():
                                 delete_source_palette(name)
                                 st.rerun()
                         else:
-                            st.caption("(Default)")
+                            st. caption("(Default)")
 
         st.divider()
 
@@ -148,123 +160,186 @@ def palette_manager_page():
                     new_src_colors.append(color)
 
             if st. form_submit_button("Add Source Palette", type="primary"):
-                if new_src_name and len(new_src_name. strip()) > 0:
+                if new_src_name and len(new_src_name.strip()) > 0:
                     add_source_palette(new_src_name.strip(), new_src_colors)
-                    st. success(f"Source palette '{new_src_name}' added!")
+                    st.success(f"Source palette '{new_src_name}' added!")
                     st. rerun()
                 else:
                     st.error("Please enter a palette name.")
 
-    # ============ TARGET PALETTES TAB ============
-    with tab2:
-        st. subheader("Target Palettes")
-        st.caption("Define the replacement color schemes for your images.")
-
-        target_palettes = get_target_palettes()
-
-        # Display existing target palettes
-        if target_palettes:
-            for name, colors in target_palettes. items():
-                with st.expander(f"🎯 {name}", expanded=False):
-                    display_color_palette(colors)
-                    col1, col2 = st.columns([3, 1])
-                    with col2:
-                        if st.button("🗑️ Delete", key=f"del_tgt_{name}", type="secondary"):
-                            delete_target_palette(name)
-                            st.rerun()
-
-        st.divider()
-
-        # Add new target palette
-        st.subheader("➕ Add New Target Palette")
-
-        with st. form("new_target_palette"):
-            new_tgt_name = st.text_input("Palette Name", placeholder="My Target Palette")
-
-            st. caption("Enter 4 colors (hex format):")
-            tgt_cols = st.columns(4)
-            new_tgt_colors = []
-            for i, col in enumerate(tgt_cols):
-                with col:
-                    color = st.color_picker(f"Color {i+1}", value="#FF0000", key=f"tgt_color_{i}")
-                    new_tgt_colors. append(color)
-
-            if st.form_submit_button("Add Target Palette", type="primary"):
-                if new_tgt_name and len(new_tgt_name.strip()) > 0:
-                    add_target_palette(new_tgt_name.strip(), new_tgt_colors)
-                    st.success(f"Target palette '{new_tgt_name}' added!")
-                    st.rerun()
-                else:
-                    st.error("Please enter a palette name.")
-
     # ============ PALETTE GROUPS TAB ============
-    with tab3:
-        st.subheader("Palette Groups")
-        st.caption("Organize target palettes into groups for batch processing.")
+    with tab2:
+        st.subheader("Palette Groups & Palettes")
+        st.caption("Organize palettes into groups.  Same palette name can exist in different groups with different colors.")
 
-        palette_groups = get_palette_groups()
-        target_palettes = get_target_palettes()
-        available_palette_names = list(target_palettes.keys())
+        # Info box
+        st.info("💡 **Example:** You can have 'light_gray' in both 'Tropimon' and 'Saturated' groups with different colors!")
 
-        # Display existing groups
-        if palette_groups:
-            for group_name, palette_names in palette_groups.items():
-                with st.expander(f"📁 {group_name} ({len(palette_names)} palettes)", expanded=False):
-                    # Show palettes in this group with previews
-                    for pname in palette_names:
-                        if pname in target_palettes:
-                            st.markdown(f"**{pname}**")
-                            st.markdown(display_color_palette_inline(target_palettes[pname]), unsafe_allow_html=True)
+        palette_groups = get_palette_groups_hex()
+        group_names = get_group_names()
 
-                    st.divider()
-
-                    # Edit group
-                    st.caption("Edit group palettes:")
-                    updated_palettes = st.multiselect(
-                        "Palettes in group",
-                        options=available_palette_names,
-                        default=[p for p in palette_names if p in available_palette_names],
-                        key=f"edit_group_{group_name}"
-                    )
-
-                    col1, col2 = st. columns(2)
-                    with col1:
-                        if st.button("💾 Update", key=f"update_group_{group_name}"):
-                            update_palette_group(group_name, updated_palettes)
-                            st. success(f"Group '{group_name}' updated!")
-                            st.rerun()
-                    with col2:
-                        if st.button("🗑️ Delete", key=f"del_group_{group_name}", type="secondary"):
-                            delete_palette_group(group_name)
-                            st.rerun()
-
-        st.divider()
-
-        # Add new group
-        st.subheader("➕ Add New Palette Group")
-
-        with st.form("new_palette_group"):
-            new_group_name = st.text_input("Group Name", placeholder="My Palette Group")
-
-            selected_palettes = st.multiselect(
-                "Select palettes for this group",
-                options=available_palette_names,
-                default=[]
-            )
-
+        # ---- Create New Group ----
+        st.subheader("➕ Create New Group")
+        with st.form("new_group"):
+            new_group_name = st.text_input("Group Name", placeholder="e.g., Tropimon, Saturated, Neon...")
             if st.form_submit_button("Create Group", type="primary"):
-                if new_group_name and len(new_group_name.strip()) > 0:
-                    if selected_palettes:
-                        add_palette_group(new_group_name.strip(), selected_palettes)
+                if new_group_name and len(new_group_name. strip()) > 0:
+                    if add_palette_group(new_group_name.strip()):
                         st.success(f"Group '{new_group_name}' created!")
                         st.rerun()
                     else:
-                        st.error("Please select at least one palette.")
+                        st.error("Group already exists.")
                 else:
                     st.error("Please enter a group name.")
 
+        st.divider()
+
+        # ---- Display Groups and Palettes ----
+        if group_names:
+            for group_name in group_names:
+                palettes_in_group = palette_groups.get(group_name, {})
+
+                with st.expander(f"📁 **{group_name}** ({len(palettes_in_group)} palettes)", expanded=True):
+
+                    # Group actions
+                    gcol1, gcol2, gcol3 = st.columns([2, 1, 1])
+                    with gcol2:
+                        if st.button("✏️ Rename", key=f"rename_grp_{group_name}"):
+                            st.session_state[f"renaming_group_{group_name}"] = True
+                    with gcol3:
+                        if st.button("🗑️ Delete Group", key=f"del_grp_{group_name}", type="secondary"):
+                            delete_palette_group(group_name)
+                            st.rerun()
+
+                    # Rename group form
+                    if st.session_state.get(f"renaming_group_{group_name}", False):
+                        with st.form(f"rename_group_form_{group_name}"):
+                            new_name = st.text_input("New group name", value=group_name)
+                            col1, col2 = st. columns(2)
+                            with col1:
+                                if st.form_submit_button("Save"):
+                                    if rename_palette_group(group_name, new_name):
+                                        st.session_state[f"renaming_group_{group_name}"] = False
+                                        st.rerun()
+                            with col2:
+                                if st.form_submit_button("Cancel"):
+                                    st. session_state[f"renaming_group_{group_name}"] = False
+                                    st. rerun()
+
+                    st.divider()
+
+                    # Display palettes in this group
+                    if palettes_in_group:
+                        for palette_name, colors in palettes_in_group.items():
+                            st.markdown(f"**🎯 {palette_name}**")
+
+                            pcol1, pcol2 = st.columns([3, 1])
+                            with pcol1:
+                                st.markdown(display_color_palette_inline(colors), unsafe_allow_html=True)
+                            with pcol2:
+                                btn_col1, btn_col2, btn_col3 = st. columns(3)
+                                with btn_col1:
+                                    if st.button("✏️", key=f"edit_{group_name}_{palette_name}", help="Edit"):
+                                        st.session_state[f"editing_{group_name}_{palette_name}"] = True
+                                with btn_col2:
+                                    if st.button("📋", key=f"copy_{group_name}_{palette_name}", help="Copy to another group"):
+                                        st.session_state[f"copying_{group_name}_{palette_name}"] = True
+                                with btn_col3:
+                                    if st.button("🗑️", key=f"del_{group_name}_{palette_name}", help="Delete"):
+                                        delete_palette_from_group(group_name, palette_name)
+                                        st.rerun()
+
+                            # Edit palette form
+                            if st.session_state.get(f"editing_{group_name}_{palette_name}", False):
+                                with st.form(f"edit_palette_{group_name}_{palette_name}"):
+                                    st.caption("Edit colors:")
+                                    edit_cols = st.columns(4)
+                                    edited_colors = []
+                                    for i, col in enumerate(edit_cols):
+                                        with col:
+                                            current_color = colors[i] if i < len(colors) else "#FFFFFF"
+                                            if not current_color.startswith('#'):
+                                                current_color = f"#{current_color}"
+                                            new_color = st.color_picker(
+                                                f"Color {i+1}",
+                                                value=current_color,
+                                                key=f"edit_color_{group_name}_{palette_name}_{i}"
+                                            )
+                                            edited_colors.append(new_color)
+
+                                    ecol1, ecol2 = st.columns(2)
+                                    with ecol1:
+                                        if st.form_submit_button("💾 Save", type="primary"):
+                                            update_palette_in_group(group_name, palette_name, edited_colors)
+                                            st.session_state[f"editing_{group_name}_{palette_name}"] = False
+                                            st.rerun()
+                                    with ecol2:
+                                        if st.form_submit_button("Cancel"):
+                                            st.session_state[f"editing_{group_name}_{palette_name}"] = False
+                                            st. rerun()
+
+                            # Copy palette form
+                            if st.session_state.get(f"copying_{group_name}_{palette_name}", False):
+                                with st.form(f"copy_palette_{group_name}_{palette_name}"):
+                                    other_groups = [g for g in group_names if g != group_name]
+                                    if other_groups:
+                                        target_group = st.selectbox("Copy to group:", other_groups)
+                                        new_palette_name = st.text_input("New name (optional):", value=palette_name)
+
+                                        ccol1, ccol2 = st.columns(2)
+                                        with ccol1:
+                                            if st.form_submit_button("📋 Copy", type="primary"):
+                                                copy_palette_to_group(group_name, palette_name, target_group, new_palette_name)
+                                                st.session_state[f"copying_{group_name}_{palette_name}"] = False
+                                                st.success(f"Copied to {target_group}!")
+                                                st.rerun()
+                                        with ccol2:
+                                            if st.form_submit_button("Cancel"):
+                                                st.session_state[f"copying_{group_name}_{palette_name}"] = False
+                                                st.rerun()
+                                    else:
+                                        st.warning("Create another group first to copy palettes.")
+                                        if st.form_submit_button("Cancel"):
+                                            st. session_state[f"copying_{group_name}_{palette_name}"] = False
+                                            st.rerun()
+
+                            st.markdown("---")
+                    else:
+                        st.caption("No palettes in this group yet.")
+
+                    # Add palette to this group
+                    st.markdown("**➕ Add Palette to this Group**")
+                    with st.form(f"add_palette_to_{group_name}"):
+                        new_palette_name = st.text_input(
+                            "Palette Name",
+                            placeholder="e.g., light_gray, ocean_blue.. .",
+                            key=f"new_pal_name_{group_name}"
+                        )
+
+                        st.caption("Pick 4 colors:")
+                        pal_cols = st.columns(4)
+                        new_pal_colors = []
+                        for i, col in enumerate(pal_cols):
+                            with col:
+                                color = st.color_picker(
+                                    f"Color {i+1}",
+                                    value="#FF0000",
+                                    key=f"new_pal_color_{group_name}_{i}"
+                                )
+                                new_pal_colors.append(color)
+
+                        if st. form_submit_button("Add Palette", type="primary"):
+                            if new_palette_name and len(new_palette_name. strip()) > 0:
+                                add_palette_to_group(group_name, new_palette_name.strip(), new_pal_colors)
+                                st.success(f"Palette '{new_palette_name}' added to {group_name}!")
+                                st.rerun()
+                            else:
+                                st.error("Please enter a palette name.")
+        else:
+            st.info("No groups yet. Create a group to start adding palettes!")
+
     # ============ IMPORT/EXPORT TAB ============
-    with tab4:
+    with tab3:
         st.subheader("Import/Export Palettes")
 
         col1, col2 = st. columns(2)
@@ -289,6 +364,8 @@ def palette_manager_page():
             st.markdown("### 📥 Import")
             st.caption("Upload a JSON file to import palettes and groups.")
 
+            merge_mode = st.checkbox("Merge with existing (uncheck to replace all)", value=True)
+
             uploaded_json = st.file_uploader(
                 "Choose JSON file",
                 type=["json"],
@@ -302,7 +379,7 @@ def palette_manager_page():
                     st.code(json_content, language="json")
 
                 if st.button("📥 Import Palettes", type="primary", use_container_width=True):
-                    if import_palettes_json(json_content):
+                    if import_palettes_json(json_content, merge=merge_mode):
                         st.success("Palettes imported successfully!")
                         st.rerun()
                     else:
@@ -315,8 +392,8 @@ def recolor_page():
 
     # Load palettes and groups
     source_palettes = get_source_palettes()
-    target_palettes = get_target_palettes()
     palette_groups = get_palette_groups()
+    group_names = get_group_names()
 
     # Sidebar configuration
     with st.sidebar:
@@ -334,46 +411,57 @@ def recolor_page():
 
         st.divider()
 
-        # Target palette/group selection
-        st.subheader("🎯 Target Selection")
+        # Target palette selection
+        st.subheader("🎯 Target Palettes")
 
         selection_mode = st.radio(
             "Selection mode",
-            options=["Individual Palettes", "Palette Group"],
-            horizontal=True
+            options=["Select by Group", "Select Individual Palettes"],
+            horizontal=False
         )
 
-        selected_target_palettes = []
+        selected_palettes = []  # List of (group_name, palette_name, colors)
 
-        if selection_mode == "Individual Palettes":
-            for palette_name in target_palettes. keys():
-                if st.checkbox(palette_name, value=True, key=f"sel_{palette_name}"):
-                    selected_target_palettes.append(palette_name)
+        if selection_mode == "Select by Group":
+            # Select entire groups
+            st.caption("Select groups to process:")
+            for group_name in group_names:
+                if st.checkbox(f"📁 {group_name}", value=True, key=f"grp_{group_name}"):
+                    for palette_name, colors in palette_groups.get(group_name, {}).items():
+                        selected_palettes. append((group_name, palette_name, colors))
+
         else:
-            if palette_groups:
-                selected_group = st.selectbox(
-                    "Select palette group",
-                    options=list(palette_groups.keys())
-                )
-                if selected_group:
-                    selected_target_palettes = [
-                        p for p in palette_groups[selected_group]
-                        if p in target_palettes
-                    ]
-                    st.caption(f"Palettes in group:  {', '.join(selected_target_palettes)}")
-            else:
-                st.warning("No palette groups defined.  Create one in Palette Manager.")
+            # Select individual palettes from any group
+            st.caption("Select individual palettes:")
+            for group_name in group_names:
+                st.markdown(f"**📁 {group_name}**")
+                for palette_name, colors in palette_groups.get(group_name, {}).items():
+                    # Show color preview inline
+                    col1, col2 = st. columns([1, 3])
+                    with col1:
+                        if st.checkbox(
+                            palette_name,
+                            value=False,
+                            key=f"sel_{group_name}_{palette_name}"
+                        ):
+                            selected_palettes.append((group_name, palette_name, colors))
+                    with col2:
+                        st.markdown(
+                            display_color_palette_inline(colors),
+                            unsafe_allow_html=True
+                        )
 
         st.divider()
 
-        # Quick links
-        st.subheader("🔗 Quick Links")
-        if st.button("🎨 Open Palette Manager", use_container_width=True):
-            st.session_state['page'] = 'manager'
-            st.rerun()
+        # Show selected count
+        st.metric("Selected Palettes", len(selected_palettes))
+
+        # Output format info
+        st.subheader("📄 Output Format")
+        st.info("Files are saved as:\n`filename_palettename.png`")
 
     # Main content
-    col1, col2 = st. columns([1, 1])
+    col1, col2 = st.columns([1, 1])
 
     with col1:
         st.subheader("📤 Upload Images")
@@ -390,7 +478,7 @@ def recolor_page():
             "🚀 Process Images",
             type="primary",
             use_container_width=True,
-            disabled=not uploaded_files or not selected_target_palettes or not selected_source
+            disabled=not uploaded_files or not selected_palettes or not selected_source
         )
 
         # Display uploaded images preview
@@ -400,20 +488,20 @@ def recolor_page():
             for i, uploaded_file in enumerate(uploaded_files):
                 with preview_cols[i % 3]:
                     image = Image.open(uploaded_file)
-                    st.image(image, caption=uploaded_file.name, use_container_width=True)
+                    st.image(image, caption=uploaded_file. name, use_container_width=True)
                     st.caption(f"Size: {image.size[0]}x{image.size[1]}")
 
     with col2:
         st.subheader("📥 Results")
 
-        if process_button and uploaded_files and selected_target_palettes and selected_source:
+        if process_button and uploaded_files and selected_palettes and selected_source:
             all_results = {}
             source_palette = source_palettes[selected_source]
 
             progress_bar = st.progress(0)
             status_text = st.empty()
 
-            total_operations = len(uploaded_files) * len(selected_target_palettes)
+            total_operations = len(uploaded_files) * len(selected_palettes)
             current_operation = 0
 
             for uploaded_file in uploaded_files:
@@ -421,18 +509,20 @@ def recolor_page():
                 all_results[filename] = {}
 
                 uploaded_file.seek(0)
-                source_image = load_image_from_bytes(uploaded_file. read())
+                source_image = load_image_from_bytes(uploaded_file.read())
 
-                for palette_name in selected_target_palettes:
-                    status_text.text(f"Processing {filename} with {palette_name}...")
+                for group_name, palette_name, target_palette in selected_palettes:
+                    status_text.text(f"Processing {filename} with {group_name}/{palette_name}...")
 
-                    target_palette = target_palettes[palette_name]
                     recolored = recolor_image(source_image, source_palette, target_palette)
 
                     img_bytes = image_to_bytes(recolored)
+
+                    # Use palette_name for output (not group)
                     all_results[filename][palette_name] = {
-                        "image":  recolored,
-                        "bytes": img_bytes
+                        "image": recolored,
+                        "bytes": img_bytes,
+                        "group": group_name
                     }
 
                     current_operation += 1
@@ -469,24 +559,26 @@ def recolor_page():
 
             # Display individual results
             for filename, palettes in results.items():
-                st.subheader(f"📄 {filename}")
+                basename = Path(filename).stem
+                st. subheader(f"📄 {filename}")
 
                 num_cols = min(len(palettes), 3)
                 result_cols = st.columns(num_cols)
 
                 for idx, (palette_name, data) in enumerate(palettes.items()):
                     with result_cols[idx % num_cols]:
+                        output_filename = f"{basename}_{palette_name}.png"
+
                         st.image(
                             data["image"],
-                            caption=f"{palette_name}",
+                            caption=f"{palette_name}\n({data. get('group', '')})",
                             use_container_width=True
                         )
 
-                        basename = Path(filename).stem
                         st.download_button(
                             label=f"⬇️ {palette_name}",
                             data=data["bytes"],
-                            file_name=f"{basename}_{palette_name}.png",
+                            file_name=output_filename,
                             mime="image/png",
                             use_container_width=True,
                             key=f"download_{filename}_{palette_name}"
@@ -495,15 +587,15 @@ def recolor_page():
                 st.divider()
 
         elif not process_button:
-            st.info("👆 Upload images and click 'Process Images' to see results here.")
+            st. info("👆 Upload images and click 'Process Images' to see results here.")
 
 
 def main():
     """Main Streamlit application."""
 
     # Initialize session state
-    if 'page' not in st. session_state:
-        st. session_state['page'] = 'recolor'
+    if 'page' not in st.session_state:
+        st.session_state['page'] = 'recolor'
 
     # Header with navigation
     st.title("🎨 PNG Recoloring Tool")

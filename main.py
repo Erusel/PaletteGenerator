@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from PIL import Image
 
-from palettes import get_source_palettes, get_target_palettes
+from palettes import get_source_palettes, get_palette_groups
 from recolor import recolor_image
 
 
@@ -27,13 +27,17 @@ def get_png_files(folder:  Path) -> list:
     if not folder.exists():
         print(f"Warning: Folder '{folder}' does not exist.")
         return []
-    return list(folder.glob("*.png")) + list(folder.glob("*.PNG"))
+    return list(folder.glob("*.png")) + list(folder.glob("*. PNG"))
 
 
-def process_image(image_path: Path, source_palette: list, target_palettes: dict) -> None:
-    """Process a single image with all target palettes."""
+def process_image(
+    image_path: Path,
+    source_palette: list,
+    palette_groups: dict
+) -> None:
+    """Process a single image with all palette groups and their palettes."""
     basename = image_path.stem
-    print(f"Processing:  {image_path.name}")
+    print(f"Processing: {image_path. name}")
 
     try:
         source_image = Image.open(str(image_path))
@@ -41,17 +45,20 @@ def process_image(image_path: Path, source_palette: list, target_palettes: dict)
         print(f"  Error loading image: {e}")
         return
 
-    output_folder = GENERATED_FOLDER / basename
-    ensure_folder_exists(output_folder)
+    ensure_folder_exists(GENERATED_FOLDER)
 
-    for palette_name, target_palette in target_palettes.items():
-        print(f"  Generating {palette_name} version...")
+    for group_name, palettes in palette_groups.items():
+        print(f"  Group: {group_name}")
 
-        recolored_image = recolor_image(source_image, source_palette, target_palette)
+        for palette_name, target_palette in palettes.items():
+            print(f"    Generating {palette_name} version...")
 
-        output_path = output_folder / f"{palette_name}.png"
-        recolored_image.save(str(output_path), "PNG")
-        print(f"    Saved: {output_path}")
+            recolored_image = recolor_image(source_image, source_palette, target_palette)
+
+            # Output format: nameofthefile_palettename.png
+            output_path = GENERATED_FOLDER / f"{basename}_{palette_name}. png"
+            recolored_image.save(str(output_path), "PNG")
+            print(f"      Saved: {output_path}")
 
 
 def run_cli():
@@ -76,17 +83,23 @@ def run_cli():
 
     # Get palettes
     source_palettes = get_source_palettes()
-    target_palettes = get_target_palettes()
+    palette_groups = get_palette_groups()
+
+    # Count total palettes
+    total_palettes = sum(len(palettes) for palettes in palette_groups.values())
+    print(f"Found {len(palette_groups)} group(s) with {total_palettes} total palette(s).")
+    print()
 
     # Use default source palette
     source_palette = source_palettes. get("Default", list(source_palettes.values())[0])
 
     for png_path in png_files:
-        process_image(png_path, source_palette, target_palettes)
+        process_image(png_path, source_palette, palette_groups)
         print()
 
     print("=" * 50)
     print("Processing complete!")
+    print(f"Output format: filename_palettename.png")
     print(f"Check the '{GENERATED_FOLDER}/' folder for output.")
     print("=" * 50)
 
