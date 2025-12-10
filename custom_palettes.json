@@ -1,0 +1,76 @@
+{
+  "source_palettes": {
+    "default": ["#FBFBFB", "#CAC1D1", "#9788A2", "#6A5976"]
+  },
+  "target_palettes":  {
+    "light_gray": ["#85848D", "#6A6971", "#54545A", "#47474C"],
+    "gray": ["#5F5C63", "#4C494F", "#3C3B3F", "#333236"],
+    "black": ["#3F3B3F", "#2D2A2D", "#242224", "#1F1D1F"],
+    "brown": ["#9E664A", "#7E4B3B", "#65382F", "#563028"],
+    "red": ["#EB2626", "#BC1E2C", "#96182E", "#7F1427"],
+    "orange": ["#FA8817", "#C85D12", "#9F3E0F", "#87350D"],
+    "yellow":  ["#FFE31C", "#E8B82B", "#C48F2C", "#A77A25"],
+    "lime":  ["#6BE130", "#62B426", "#58901E", "#4B7A19"],
+    "green": ["#32A33C", "#287920", "#266119", "#205215"],
+    "cyan": ["#62D9DA", "#1FBABB", "#1A939F", "#167D87"],
+    "light_blue": ["#2B9AFF", "#247CBC", "#20608D", "#1B5278"],
+    "blue": ["#4D63CF", "#314A94", "#253F70", "#1F365F"],
+    "purple": ["#B23CED", "#8734C3", "#672FA0", "#582888"],
+    "magenta": ["#ED3CED", "#B634C3", "#8D2FA0", "#782888"],
+    "pink": ["#FF42B5", "#D53DA2", "#A33788", "#8B2F74"]
+  },
+  "palette_groups": {
+    "saturated": [
+      "light_gray",
+      "gray",
+      "black",
+      "brown",
+      "red",
+      "orange",
+      "yellow",
+      "lime",
+      "green",
+      "cyan",
+      "light_blue",
+      "blue",
+      "purple",
+      "magenta",
+      "pink"
+    ],
+    "warm_tones": [
+      "brown",
+      "red",
+      "orange",
+      "yellow",
+      "pink",
+      "magenta"
+    ],
+    "cool_tones": [
+      "cyan",
+      "light_blue",
+      "blue",
+      "purple",
+      "green",
+      "lime"
+    ],
+    "neutrals": [
+      "light_gray",
+      "gray",
+      "black",
+      "brown"
+    ],
+    "rainbow": [
+      "red",
+      "orange",
+      "yellow",
+      "lime",
+      "green",
+      "cyan",
+      "light_blue",
+      "blue",
+      "purple",
+      "magenta",
+      "pink"
+    ]
+  }
+}
