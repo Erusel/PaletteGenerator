@@ -590,12 +590,51 @@ def recolor_page():
             st. info("👆 Upload images and click 'Process Images' to see results here.")
 
 
+def apply_dark_theme():
+    st.markdown("""
+    <style>
+        body {
+            background-color: #121212;
+            color: #e0e0e0;
+        }
+        .stButton>button {
+            background-color: #333;
+            color: #e0e0e0;
+        }
+        .stTextInput, .stTextArea, .stSelectbox, .stCheckbox {
+            background-color: #333;
+            color: #e0e0e0;
+        }
+        .stTabs [data-baseweb="tab-list"] {
+            background-color: #333;
+        }
+        .stMetric {
+            background-color: #333;
+            color: #e0e0e0;
+        }
+        .stDownloadButton>button {
+            background-color: #333;
+            color: #e0e0e0;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+# Add this to the main function to toggle the theme
 def main():
     """Main Streamlit application."""
 
-    # Initialize session state
-    if 'page' not in st.session_state:
-        st.session_state['page'] = 'recolor'
+    # Initialize session state for theme
+    if 'theme' not in st.session_state:
+        st.session_state['theme'] = 'dark'
+
+    # Sidebar theme toggle
+    with st.sidebar:
+        theme_toggle = st.checkbox("🌙 Enable Dark Theme", value=(st.session_state['theme'] == 'dark'))
+        st.session_state['theme'] = 'dark' if theme_toggle else 'light'
+
+    # Apply the dark theme if enabled
+    if st.session_state['theme'] == 'dark':
+        apply_dark_theme()
 
     # Header with navigation
     st.title("🎨 PNG Recoloring Tool")
@@ -608,6 +647,9 @@ def main():
 
     with tab2:
         palette_manager_page()
+
+if __name__ == "__main__":
+    main()
 
 
 if __name__ == "__main__":
