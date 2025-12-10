@@ -28,7 +28,7 @@ def get_png_files(folder:  Path) -> list:
     if not folder.exists():
         print(f"Warning: Folder '{folder}' does not exist.")
         return []
-    return list(folder.glob("*.png")) + list(folder.glob("*. PNG"))
+    return list(folder.glob("*.png")) + list(folder.glob("*.PNG"))
 
 
 def process_image(

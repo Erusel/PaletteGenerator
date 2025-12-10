@@ -107,7 +107,7 @@ def display_color_palette_inline(palette: list) -> str:
 def create_zip_file(images_dict: dict, include_emissive: bool = False) -> bytes:
     """
     Create a ZIP file containing all recolored images. 
-    Output format: filename_palettename. png
+    Output format: filename_palettename.png
     If include_emissive is True, also includes filename_palettename_emissive.png
     """
     zip_buffer = io.BytesIO()
@@ -117,7 +117,7 @@ def create_zip_file(images_dict: dict, include_emissive: bool = False) -> bytes:
             basename = Path(filename).stem
             for palette_name, data in palettes.items():
                 # Regular recolored image
-                zip_path = f"{basename}_{palette_name}. png"
+                zip_path = f"{basename}_{palette_name}.png"
                 zip_file. writestr(zip_path, data['bytes'])
                 
                 # Emissive texture if requested and available
