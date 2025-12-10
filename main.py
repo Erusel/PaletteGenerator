@@ -1,3 +1,4 @@
+
 """
 Main entry point for the PNG recoloring script.
 Can run as CLI or launch the Streamlit web app.
@@ -9,7 +10,7 @@ from pathlib import Path
 from PIL import Image
 
 from palettes import get_source_palettes, get_palette_groups
-from recolor import recolor_image
+from recolor import recolor_image, create_emissive_texture
 
 
 # Define folder paths
@@ -33,7 +34,8 @@ def get_png_files(folder:  Path) -> list:
 def process_image(
     image_path: Path,
     source_palette: list,
-    palette_groups: dict
+    palette_groups: dict,
+    generate_emissive: bool = False
 ) -> None:
     """Process a single image with all palette groups and their palettes."""
     basename = image_path.stem
@@ -53,12 +55,22 @@ def process_image(
         for palette_name, target_palette in palettes.items():
             print(f"    Generating {palette_name} version...")
 
+            # Generate regular recolored image
             recolored_image = recolor_image(source_image, source_palette, target_palette)
 
-            # Output format: nameofthefile_palettename.png
+            # Output format:  nameofthefile_palettename.png
             output_path = GENERATED_FOLDER / f"{basename}_{palette_name}. png"
             recolored_image.save(str(output_path), "PNG")
             print(f"      Saved: {output_path}")
+
+            # Generate emissive texture if requested
+            if generate_emissive:
+                print(f"    Generating {palette_name} emissive version...")
+                emissive_image = create_emissive_texture(source_image, source_palette, target_palette)
+                
+                emissive_path = GENERATED_FOLDER / f"{basename}_{palette_name}_emissive. png"
+                emissive_image.save(str(emissive_path), "PNG")
+                print(f"      Saved: {emissive_path}")
 
 
 def run_cli():
@@ -68,17 +80,22 @@ def run_cli():
     print("=" * 50)
     print()
 
+    # Check for --emissive flag
+    generate_emissive = "--emissive" in sys.argv
+
     ensure_folder_exists(ASSETS_FOLDER)
     ensure_folder_exists(GENERATED_FOLDER)
 
     png_files = get_png_files(ASSETS_FOLDER)
 
-    if not png_files:
+    if not png_files: 
         print(f"No PNG files found in '{ASSETS_FOLDER}/'")
         print("Please add PNG files to the assets/ folder and run again.")
         return
 
     print(f"Found {len(png_files)} PNG file(s) to process.")
+    if generate_emissive:
+        print("✨ Emissive texture generation:  ENABLED")
     print()
 
     # Get palettes
@@ -94,12 +111,14 @@ def run_cli():
     source_palette = source_palettes. get("Default", list(source_palettes.values())[0])
 
     for png_path in png_files:
-        process_image(png_path, source_palette, palette_groups)
+        process_image(png_path, source_palette, palette_groups, generate_emissive)
         print()
 
     print("=" * 50)
     print("Processing complete!")
     print(f"Output format: filename_palettename.png")
+    if generate_emissive:
+        print(f"Emissive format: filename_palettename_emissive.png")
     print(f"Check the '{GENERATED_FOLDER}/' folder for output.")
     print("=" * 50)
 

@@ -1,6 +1,7 @@
+
 """
-Streamlit Web Application for PNG Recoloring.
-Upload PNG images and generate recolored versions with custom palettes.
+Streamlit Web Application for PNG Recoloring. 
+Upload PNG images and generate recolored versions with custom palettes. 
 Palettes are organized by groups - same palette name can exist in different groups.
 """
 
@@ -21,7 +22,7 @@ from palettes import (
     rgb_to_hex, hex_to_rgb,
     get_unique_palette_identifier
 )
-from recolor import recolor_image, load_image_from_bytes, image_to_bytes
+from recolor import recolor_image, create_emissive_texture, load_image_from_bytes, image_to_bytes
 
 
 # Page configuration
@@ -46,23 +47,33 @@ st.markdown("""
     .palette-preview {
         display: flex;
         gap: 4px;
-        margin: 8px 0;
+        margin:  8px 0;
     }
-    . stTabs [data-baseweb="tab-list"] {
+    .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
     }
     .group-header {
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        background:  linear-gradient(90deg, #667eea 0%, #764ba2 100%);
         padding: 10px 15px;
         border-radius:  8px;
         color: white;
         margin-bottom: 10px;
     }
+    . emissive-badge {
+        background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        padding: 2px 8px;
+        border-radius:  4px;
+        font-size: 0.8em;
+        font-weight: bold;
+        display: inline-block;
+        margin-left: 8px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 
-def display_color_palette(palette:  list, show_hex: bool = True):
+def display_color_palette(palette: list, show_hex: bool = True):
     """Display a color palette with visual color boxes."""
     cols = st.columns(len(palette))
     for i, (col, color) in enumerate(zip(cols, palette)):
@@ -77,7 +88,7 @@ def display_color_palette(palette:  list, show_hex: bool = True):
                 unsafe_allow_html=True
             )
             if show_hex:
-                st. caption(hex_color)
+                st.caption(hex_color)
 
 
 def display_color_palette_inline(palette: list) -> str:
@@ -93,20 +104,26 @@ def display_color_palette_inline(palette: list) -> str:
     return html
 
 
-def create_zip_file(images_dict: dict) -> bytes:
+def create_zip_file(images_dict: dict, include_emissive: bool = False) -> bytes:
     """
-    Create a ZIP file containing all recolored images.
-    Output format: filename_palettename.png
+    Create a ZIP file containing all recolored images. 
+    Output format: filename_palettename. png
+    If include_emissive is True, also includes filename_palettename_emissive.png
     """
     zip_buffer = io.BytesIO()
 
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for filename, palettes in images_dict.items():
             basename = Path(filename).stem
-            for palette_name, img_bytes in palettes.items():
-                # Format: nameofthefile_color.png
-                zip_path = f"{basename}_{palette_name}.png"
-                zip_file. writestr(zip_path, img_bytes)
+            for palette_name, data in palettes.items():
+                # Regular recolored image
+                zip_path = f"{basename}_{palette_name}. png"
+                zip_file. writestr(zip_path, data['bytes'])
+                
+                # Emissive texture if requested and available
+                if include_emissive and 'emissive_bytes' in data:
+                    emissive_path = f"{basename}_{palette_name}_emissive.png"
+                    zip_file.writestr(emissive_path, data['emissive_bytes'])
 
     zip_buffer.seek(0)
     return zip_buffer.getvalue()
@@ -131,7 +148,7 @@ def palette_manager_page():
 
         # Display existing source palettes
         if source_palettes:
-            for name, colors in source_palettes. items():
+            for name, colors in source_palettes.items():
                 with st.expander(f"🎨 {name}", expanded=False):
                     display_color_palette(colors)
                     col1, col2 = st. columns([3, 1])
@@ -141,7 +158,7 @@ def palette_manager_page():
                                 delete_source_palette(name)
                                 st.rerun()
                         else:
-                            st. caption("(Default)")
+                            st.caption("(Default)")
 
         st.divider()
 
@@ -159,18 +176,18 @@ def palette_manager_page():
                     color = st.color_picker(f"Color {i+1}", value="#FFFFFF", key=f"src_color_{i}")
                     new_src_colors.append(color)
 
-            if st. form_submit_button("Add Source Palette", type="primary"):
-                if new_src_name and len(new_src_name.strip()) > 0:
+            if st.form_submit_button("Add Source Palette", type="primary"):
+                if new_src_name and len(new_src_name. strip()) > 0:
                     add_source_palette(new_src_name.strip(), new_src_colors)
                     st.success(f"Source palette '{new_src_name}' added!")
                     st. rerun()
                 else:
-                    st.error("Please enter a palette name.")
+                    st. error("Please enter a palette name.")
 
     # ============ PALETTE GROUPS TAB ============
     with tab2:
         st.subheader("Palette Groups & Palettes")
-        st.caption("Organize palettes into groups.  Same palette name can exist in different groups with different colors.")
+        st.caption("Organize palettes into groups. Same palette name can exist in different groups with different colors.")
 
         # Info box
         st.info("💡 **Example:** You can have 'light_gray' in both 'Tropimon' and 'Saturated' groups with different colors!")
@@ -196,7 +213,7 @@ def palette_manager_page():
 
         # ---- Display Groups and Palettes ----
         if group_names:
-            for group_name in group_names:
+            for group_name in group_names: 
                 palettes_in_group = palette_groups.get(group_name, {})
 
                 with st.expander(f"📁 **{group_name}** ({len(palettes_in_group)} palettes)", expanded=True):
@@ -214,7 +231,7 @@ def palette_manager_page():
                     # Rename group form
                     if st.session_state.get(f"renaming_group_{group_name}", False):
                         with st.form(f"rename_group_form_{group_name}"):
-                            new_name = st.text_input("New group name", value=group_name)
+                            new_name = st. text_input("New group name", value=group_name)
                             col1, col2 = st. columns(2)
                             with col1:
                                 if st.form_submit_button("Save"):
@@ -243,7 +260,7 @@ def palette_manager_page():
                                         st.session_state[f"editing_{group_name}_{palette_name}"] = True
                                 with btn_col2:
                                     if st.button("📋", key=f"copy_{group_name}_{palette_name}", help="Copy to another group"):
-                                        st.session_state[f"copying_{group_name}_{palette_name}"] = True
+                                        st. session_state[f"copying_{group_name}_{palette_name}"] = True
                                 with btn_col3:
                                     if st.button("🗑️", key=f"del_{group_name}_{palette_name}", help="Delete"):
                                         delete_palette_from_group(group_name, palette_name)
@@ -282,7 +299,7 @@ def palette_manager_page():
                             if st.session_state.get(f"copying_{group_name}_{palette_name}", False):
                                 with st.form(f"copy_palette_{group_name}_{palette_name}"):
                                     other_groups = [g for g in group_names if g != group_name]
-                                    if other_groups:
+                                    if other_groups: 
                                         target_group = st.selectbox("Copy to group:", other_groups)
                                         new_palette_name = st.text_input("New name (optional):", value=palette_name)
 
@@ -290,7 +307,7 @@ def palette_manager_page():
                                         with ccol1:
                                             if st.form_submit_button("📋 Copy", type="primary"):
                                                 copy_palette_to_group(group_name, palette_name, target_group, new_palette_name)
-                                                st.session_state[f"copying_{group_name}_{palette_name}"] = False
+                                                st. session_state[f"copying_{group_name}_{palette_name}"] = False
                                                 st.success(f"Copied to {target_group}!")
                                                 st.rerun()
                                         with ccol2:
@@ -300,7 +317,7 @@ def palette_manager_page():
                                     else:
                                         st.warning("Create another group first to copy palettes.")
                                         if st.form_submit_button("Cancel"):
-                                            st. session_state[f"copying_{group_name}_{palette_name}"] = False
+                                            st.session_state[f"copying_{group_name}_{palette_name}"] = False
                                             st.rerun()
 
                             st.markdown("---")
@@ -345,7 +362,7 @@ def palette_manager_page():
         col1, col2 = st. columns(2)
 
         with col1:
-            st. markdown("### 📤 Export")
+            st.markdown("### 📤 Export")
             st.caption("Download all your palettes and groups as JSON.")
 
             json_data = export_palettes_json()
@@ -372,7 +389,7 @@ def palette_manager_page():
                 key="import_json"
             )
 
-            if uploaded_json:
+            if uploaded_json: 
                 json_content = uploaded_json.read().decode('utf-8')
 
                 with st.expander("Preview Import"):
@@ -428,9 +445,9 @@ def recolor_page():
             for group_name in group_names:
                 if st.checkbox(f"📁 {group_name}", value=True, key=f"grp_{group_name}"):
                     for palette_name, colors in palette_groups.get(group_name, {}).items():
-                        selected_palettes. append((group_name, palette_name, colors))
+                        selected_palettes.append((group_name, palette_name, colors))
 
-        else:
+        else: 
             # Select individual palettes from any group
             st.caption("Select individual palettes:")
             for group_name in group_names:
@@ -450,6 +467,19 @@ def recolor_page():
                             display_color_palette_inline(colors),
                             unsafe_allow_html=True
                         )
+
+        st.divider()
+
+        # Emissive texture option
+        st.subheader("✨ Emissive Textures")
+        generate_emissive = st.checkbox(
+            "Generate emissive textures",
+            value=False,
+            help="Create additional textures showing only the recolored pixels (rest transparent)"
+        )
+        
+        if generate_emissive: 
+            st.info("💡 Emissive textures will be saved as:\n`filename_palettename_emissive.png`")
 
         st.divider()
 
@@ -482,17 +512,17 @@ def recolor_page():
         )
 
         # Display uploaded images preview
-        if uploaded_files:
+        if uploaded_files: 
             st.subheader("📷 Uploaded Images Preview")
             preview_cols = st.columns(min(len(uploaded_files), 3))
             for i, uploaded_file in enumerate(uploaded_files):
                 with preview_cols[i % 3]:
                     image = Image.open(uploaded_file)
-                    st.image(image, caption=uploaded_file. name, use_container_width=True)
+                    st.image(image, caption=uploaded_file.name, use_container_width=True)
                     st.caption(f"Size: {image.size[0]}x{image.size[1]}")
 
     with col2:
-        st.subheader("📥 Results")
+        st. subheader("📥 Results")
 
         if process_button and uploaded_files and selected_palettes and selected_source:
             all_results = {}
@@ -504,7 +534,7 @@ def recolor_page():
             total_operations = len(uploaded_files) * len(selected_palettes)
             current_operation = 0
 
-            for uploaded_file in uploaded_files:
+            for uploaded_file in uploaded_files: 
                 filename = uploaded_file.name
                 all_results[filename] = {}
 
@@ -515,37 +545,54 @@ def recolor_page():
                     status_text.text(f"Processing {filename} with {group_name}/{palette_name}...")
 
                     recolored = recolor_image(source_image, source_palette, target_palette)
-
                     img_bytes = image_to_bytes(recolored)
 
-                    # Use palette_name for output (not group)
-                    all_results[filename][palette_name] = {
-                        "image": recolored,
+                    result_data = {
+                        "image":  recolored,
                         "bytes": img_bytes,
                         "group": group_name
                     }
 
+                    # Generate emissive texture if requested
+                    if generate_emissive: 
+                        emissive = create_emissive_texture(source_image, source_palette, target_palette)
+                        emissive_bytes = image_to_bytes(emissive)
+                        result_data["emissive_image"] = emissive
+                        result_data["emissive_bytes"] = emissive_bytes
+
+                    all_results[filename][palette_name] = result_data
+
                     current_operation += 1
-                    progress_bar. progress(current_operation / total_operations)
+                    progress_bar.progress(current_operation / total_operations)
 
             status_text.text("✅ Processing complete!")
             progress_bar.empty()
 
             st.session_state['results'] = all_results
+            st.session_state['has_emissive'] = generate_emissive
 
         # Display results
-        if 'results' in st.session_state and st.session_state['results']:
+        if 'results' in st.session_state and st.session_state['results']: 
             results = st.session_state['results']
+            has_emissive = st.session_state.get('has_emissive', False)
 
             # Download all as ZIP
             zip_data = {}
             for filename, palettes in results.items():
                 zip_data[filename] = {
-                    palette_name: data["bytes"]
+                    palette_name: {
+                        'bytes': data["bytes"],
+                        'emissive_bytes': data. get("emissive_bytes")
+                    }
                     for palette_name, data in palettes.items()
                 }
 
-            zip_bytes = create_zip_file(zip_data)
+            # Flatten for create_zip_file
+            zip_data_flat = {}
+            for filename, palettes in results.items():
+                zip_data_flat[filename] = palettes
+
+            zip_bytes = create_zip_file(zip_data_flat, include_emissive=has_emissive)
 
             st.download_button(
                 label="📦 Download All (ZIP)",
@@ -562,32 +609,57 @@ def recolor_page():
                 basename = Path(filename).stem
                 st. subheader(f"📄 {filename}")
 
-                num_cols = min(len(palettes), 3)
-                result_cols = st.columns(num_cols)
-
-                for idx, (palette_name, data) in enumerate(palettes.items()):
-                    with result_cols[idx % num_cols]:
+                for palette_name, data in palettes.items():
+                    st.markdown(f"**🎨 {palette_name}** ({data. get('group', '')})")
+                    
+                    # Display regular and emissive side by side if available
+                    if has_emissive and 'emissive_image' in data:
+                        img_col1, img_col2 = st.columns(2)
+                        
+                        with img_col1:
+                            st.markdown("**Regular**")
+                            st.image(data["image"], use_container_width=True)
+                            output_filename = f"{basename}_{palette_name}.png"
+                            st.download_button(
+                                label=f"⬇️ Download Regular",
+                                data=data["bytes"],
+                                file_name=output_filename,
+                                mime="image/png",
+                                use_container_width=True,
+                                key=f"download_{filename}_{palette_name}_regular"
+                            )
+                        
+                        with img_col2:
+                            st.markdown('**Emissive** <span class="emissive-badge">✨ GLOW</span>', unsafe_allow_html=True)
+                            st.image(data["emissive_image"], use_container_width=True)
+                            emissive_filename = f"{basename}_{palette_name}_emissive.png"
+                            st.download_button(
+                                label=f"⬇️ Download Emissive",
+                                data=data["emissive_bytes"],
+                                file_name=emissive_filename,
+                                mime="image/png",
+                                use_container_width=True,
+                                key=f"download_{filename}_{palette_name}_emissive"
+                            )
+                    else:
+                        # Just show regular
+                        st.image(data["image"], use_container_width=True)
                         output_filename = f"{basename}_{palette_name}.png"
-
-                        st.image(
-                            data["image"],
-                            caption=f"{palette_name}\n({data. get('group', '')})",
-                            use_container_width=True
-                        )
-
                         st.download_button(
-                            label=f"⬇️ {palette_name}",
+                            label=f"⬇️ Download",
                             data=data["bytes"],
                             file_name=output_filename,
                             mime="image/png",
                             use_container_width=True,
                             key=f"download_{filename}_{palette_name}"
                         )
+                    
+                    st.markdown("---")
 
                 st.divider()
 
         elif not process_button:
-            st. info("👆 Upload images and click 'Process Images' to see results here.")
+            st.info("👆 Upload images and click 'Process Images' to see results here.")
 
 
 def main():
