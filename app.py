@@ -105,7 +105,7 @@ def create_zip_file(images_dict: dict) -> bytes:
             basename = Path(filename).stem
             for palette_name, img_bytes in palettes.items():
                 # Format: nameofthefile_color.png
-                zip_path = f"{basename}_{palette_name}. png"
+                zip_path = f"{basename}_{palette_name}.png"
                 zip_file. writestr(zip_path, img_bytes)
 
     zip_buffer.seek(0)
